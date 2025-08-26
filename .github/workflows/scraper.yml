@@ -1,0 +1,26 @@
+name: Scraper diário
+
+on:
+  schedule:
+    - cron: "0 12 * * *"  # 12:00 UTC (~09:00 America/Sao_Paulo)
+  workflow_dispatch:
+
+jobs:
+  run-scraper:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install -r requirements.txt
+      - run: python scraper.py
+      - name: Commit e push
+        run: |
+          git config user.name "github-actions"
+          git config user.email "actions@github.com"
+          git add data/latest_prices.*
+          git commit -m "Atualização diária de preços" || echo "Sem alterações"
+          git push

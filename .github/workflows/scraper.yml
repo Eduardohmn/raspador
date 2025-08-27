@@ -2,25 +2,51 @@ name: Scraper diário
 
 on:
   schedule:
-    - cron: "0 12 * * *"  # 12:00 UTC (~09:00 America/Sao_Paulo)
+    - cron: "0 12 * * *"   # 12:00 UTC (~09:00 BRT)
   workflow_dispatch:
+
+# evita duas execuções ao mesmo tempo
+concurrency:
+  group: prices-main
+  cancel-in-progress: true
 
 jobs:
   run-scraper:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # <- importante para poder rebasear/pullar
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-      - run: pip install -r requirements.txt
-      - run: python scraper.py
-      - name: Commit e push
+
+      - name: Install deps
+        run: |
+          python -V
+          pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run scraper
+        run: python scraper.py
+
+      - name: Commit & Push data
         run: |
           git config user.name "github-actions"
           git config user.email "actions@github.com"
+
           git add data/latest_prices.*
-          git commit -m "Atualização diária de preços" || echo "Sem alterações"
-          git push
+          # se não tiver mudanças, sai sem erro
+          git commit -m "chore(data): atualização diária de preços [skip ci]" || exit 0
+
+          # o main pode ter mudado enquanto rodamos: rebaseia e empurra
+          git pull --rebase origin main || true
+
+          # empurra o commit rebaseado
+          git push origin HEAD:main

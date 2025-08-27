@@ -16,9 +16,31 @@ HEADERS = {
     "Accept-Language": "pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7",
 }
 
-def norm(s): return re.sub(r"\s+", " ", s or "").strip()
+def norm(s: str) -> str:
+    return re.sub(r"\s+", " ", s or "").strip()
 
-def jsonld_price(soup):
+# ---- helpers para ML (juntar parte inteira + centavos) ----
+def join_fraction_cents(container: BeautifulSoup) -> str:
+    if not container: 
+        return ""
+    # parte inteira
+    frac = container.select_one(".andes-money-amount__fraction, .price-tag-fraction")
+    # centavos (inclui o caso da sua imagem: __cents-superscript)
+    cents = container.select_one(
+        ".andes-money-amount__cents, "
+        ".andes-money-amount__cents-superscript, "
+        ".price-tag-cents"
+    )
+    if frac:
+        f = norm(frac.get_text())
+        c = norm(cents.get_text()) if cents else ""
+        if c.isdigit() and c:
+            return f"R$ {f},{c}"
+        return f"R$ {f}"
+    return ""
+
+# ---------- JSON-LD (regular) ----------
+def jsonld_price(soup: BeautifulSoup):
     for tag in soup.find_all("script", {"type": "application/ld+json"}):
         try:
             data = json.loads(tag.string or "{}")
@@ -34,58 +56,87 @@ def jsonld_price(soup):
                 for off in offers:
                     price = off.get("price") or off.get("priceSpecification", {}).get("price")
                     if price: return norm(str(price))
-            if obj.get("price"): return norm(str(obj["price"]))
+            if obj.get("price"): 
+                return norm(str(obj["price"]))
     return None
 
-def meta_price(soup):
-    for sel in [
+# ---------- META (regular) ----------
+def meta_price(soup: BeautifulSoup):
+    for name, attrs in [
         ('meta', {'property': 'product:price:amount'}),
         ('meta', {'itemprop': 'price'}),
         ('meta', {'name': 'og:price:amount'}),
         ('meta', {'name': 'twitter:data1'}),
     ]:
-        tag = soup.find(*sel)
+        tag = soup.find(name, attrs)
         if tag and tag.get("content") and any(ch.isdigit() for ch in tag["content"]):
             return norm(tag["content"])
     return None
 
-def common_price(soup):
-    # Mercado Livre
+# ---------- fallback genérico ----------
+def common_price(soup: BeautifulSoup):
+    # tente explicitamente o container promo primeiro
+    cont = soup.select_one(".ui-pdp-price__second-line")
+    joined = join_fraction_cents(cont)
+    if joined:
+        return joined
+
+    # se não achou o container, tente fraction + cents em geral
     for sel in [
-        "span.andes-money-amount__fraction",
-        ".ui-pdp-price__second-line .andes-money-amount__fraction",
+        ".ui-pdp-price__main-container .andes-money-amount__fraction",
         ".andes-money-amount__fraction",
     ]:
         el = soup.select_one(sel)
         if el and norm(el.get_text()):
-            cents = soup.select_one("span.andes-money-amount__cents")
+            # procurar cents próximo (sup/normal)
+            cents = el.find_next("span", class_=re.compile(r"andes-money-amount__cents"))
+            if not cents:
+                cents = el.find_next("span", class_=re.compile(r"andes-money-amount__cents-superscript"))
             if cents and norm(cents.get_text()).isdigit():
                 return f"R$ {norm(el.get_text())},{norm(cents.get_text())}"
-            return norm(el.get_text())
+            return f"R$ {norm(el.get_text())}"
 
-    # Shopee (pode falhar se SPA)
+    # Shopee (quando renderiza)
     for sel in [
-        "div[class*='product-price__current-price']",
         "div[data-sqe='price'] span",
-        "div[class*='pmmxKc']",
+        "div[class*='product-price__current-price']",
     ]:
         el = soup.select_one(sel)
         if el and norm(el.get_text()):
             return norm(el.get_text())
 
-    # Fallback: padrão "R$ 9,99"
+    # regex final
     m = re.search(r"R\$\s*\d{1,3}(?:\.\d{3})*,\d{2}", soup.get_text(" ", strip=True))
     return norm(m.group(0)) if m else None
 
-def extract_price(html, selector=""):
+def extract_price(html: str, selector: str = ""):
     soup = BeautifulSoup(html, "html.parser")
+
+    # 1) Seletor manual (pode apontar para o CONTAINER promo)
     if selector:
         el = soup.select_one(selector)
-        if el and norm(el.get_text()):
-            return norm(el.get_text())
-    for fn in (jsonld_price, meta_price, common_price):
+        if el:
+            joined = join_fraction_cents(el)
+            if joined:
+                return joined
+            txt = norm(el.get_text())
+            m = re.search(r"R\$\s*\d{1,3}(?:\.\d{3})*,\d{2}", txt)
+            if m:
+                return norm(m.group(0))
+            if txt:
+                return txt
+
+    # 2) Preferir DOM promo do ML antes de JSON-LD/meta
+    promo = common_price(soup)
+    if promo:
+        return promo
+
+    # 3) Fallbacks (podem ser preço de lista)
+    for fn in (jsonld_price, meta_price):
         p = fn(soup)
-        if p: return p
+        if p: 
+            return p
+
     return ""
 
 def fetch(url):
@@ -98,7 +149,8 @@ def main():
     with open(URLS_CSV, newline="", encoding="utf-8") as f:
         for line in csv.DictReader(f):
             pid = norm(line.get("id","")); url = norm(line.get("url","")); selector = norm(line.get("selector",""))
-            if not pid or not url: continue
+            if not pid or not url: 
+                continue
             try:
                 html = fetch(url)
                 price = extract_price(html, selector)
@@ -107,14 +159,16 @@ def main():
                 rows.append({"id": pid, "price": "", "url": url, "ts_utc": datetime.now(timezone.utc).isoformat(), "error": str(e)})
             time.sleep(1)
 
-    # CSV + JSON
     (DATA_DIR / "latest_prices.csv").write_text(
         "id,price,url,ts_utc,error\n" + "\n".join(
             f"{r['id']},{r['price']},{r['url']},{r['ts_utc']},{r['error']}" for r in rows
         ),
         encoding="utf-8"
     )
-    (DATA_DIR / "latest_prices.json").write_text(json.dumps(rows, ensure_ascii=False, indent=2), encoding="utf-8")
+    (DATA_DIR / "latest_prices.json").write_text(
+        json.dumps(rows, ensure_ascii=False, indent=2),
+        encoding="utf-8"
+    )
     print(f"[ok] {len(rows)} itens atualizados em data/latest_prices.*")
 
 if __name__ == "__main__":

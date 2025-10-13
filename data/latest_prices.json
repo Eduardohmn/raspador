@@ -3,14 +3,14 @@
     "id": "carregadores:Cabo USB-C + Fonte 25W",
     "price": "R$ 48,22",
     "url": "https://mercadolivre.com/sec/1tNhNAF",
-    "ts_utc": "2025-10-12T12:35:33.121909+00:00",
+    "ts_utc": "2025-10-13T12:40:52.282709+00:00",
     "error": ""
   },
   {
     "id": "carregadores:Cabo iPhone (C/8 pinos) 1m",
-    "price": "",
+    "price": "R$ 19,06",
     "url": "https://mercadolivre.com/sec/1BBBZxJ",
-    "ts_utc": "2025-10-12T12:35:35.164343+00:00",
-    "error": "[Errno 2] No such file or directory: '/home/runner/work/raspador/raspador/data/snapshots/carregadores:Cabo iPhone (C/8 pinos) 1m.html'"
+    "ts_utc": "2025-10-13T12:40:54.364977+00:00",
+    "error": ""
   }
 ]

@@ -1,16 +1,16 @@
 [
   {
     "id": "carregadores:Cabo USB-C + Fonte 25W",
-    "price": "",
+    "price": "R$ 48,22",
     "url": "https://mercadolivre.com/sec/1tNhNAF",
-    "ts_utc": "2025-10-16T12:42:11.345418+00:00",
-    "error": "não foi possível extrair o preço (ML)"
+    "ts_utc": "2025-10-17T12:40:14.275260+00:00",
+    "error": ""
   },
   {
     "id": "carregadores:Cabo iPhone (C/8 pinos) 1m",
     "price": "R$ 19,06",
     "url": "https://mercadolivre.com/sec/1BBBZxJ",
-    "ts_utc": "2025-10-16T12:42:13.435777+00:00",
+    "ts_utc": "2025-10-17T12:40:16.084439+00:00",
     "error": ""
   }
 ]
